@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login - Dashboard Produção</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: linear-gradient(135deg, #0f172a, #1e293b);
+      color: white;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .box {
+      width: 100%;
+      max-width: 360px;
+      background: #1e293b;
+      padding: 28px;
+      border-radius: 18px;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.35);
+    }
+    h1 {
+      margin: 0 0 18px;
+      text-align: center;
+      font-size: 28px;
+    }
+    p {
+      margin: 0 0 18px;
+      text-align: center;
+      color: #cbd5e1;
+      font-size: 14px;
+    }
+    input {
+      width: 100%;
+      padding: 12px 14px;
+      margin-bottom: 12px;
+      border: 0;
+      border-radius: 10px;
+      background: #334155;
+      color: white;
+      outline: none;
+    }
+    input::placeholder { color: #94a3b8; }
+    button {
+      width: 100%;
+      padding: 12px 14px;
+      border: 0;
+      border-radius: 10px;
+      background: linear-gradient(90deg, #22c55e, #16a34a);
+      color: white;
+      font-weight: bold;
+      cursor: pointer;
+      transition: transform 0.15s ease;
+    }
+    button:hover { transform: scale(1.02); }
+    .erro {
+      min-height: 20px;
+      margin-top: 12px;
+      color: #fca5a5;
+      text-align: center;
+      font-size: 14px;
+    }
+    .hint {
+      margin-top: 14px;
+      text-align: center;
+      color: #94a3b8;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="box">
+    <h1>Login</h1>
+    <p>Acesse o dashboard de produção</p>
+
+    <input id="username" type="text" placeholder="Usuário">
+    <input id="senha" type="password" placeholder="Senha">
+    <button onclick="entrar()">Entrar</button>
+
+    <div id="erro" class="erro"></div>
+    <div class="hint">Teste: admin / 1234</div>
+  </div>
+
+  <script>
+    async function entrar() {
+      const username = document.getElementById("username").value.trim();
+      const senha = document.getElementById("senha").value.trim();
+      const erro = document.getElementById("erro");
+      erro.textContent = "";
+
+      try {
+        const resposta = await fetch("/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username, senha })
+        });
+
+        const dados = await resposta.json();
+
+        if (dados.status === "ok") {
+          window.location.href = "/dashboard";
+        } else {
+          erro.textContent = dados.mensagem || "Usuário ou senha incorretos";
+        }
+      } catch (e) {
+        erro.textContent = "Erro ao tentar entrar";
+      }
+    }
+  </script>
+</body>
+</html>

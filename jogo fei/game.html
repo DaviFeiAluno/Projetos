@@ -1,0 +1,883 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Jogar · Dungeon Quest</title>
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    #dialogue-box {
+      display: none;
+      position: absolute;
+      bottom: 20px;
+      left: 20px;
+      right: 20px;
+      background: rgba(10,10,20,0.96);
+      border: 2px solid #e0c97f;
+      padding: 16px 20px;
+      z-index: 20;
+      font-family: 'Crimson Text', Georgia, serif;
+      display: none;
+      align-items: flex-start;
+      gap: 14px;
+    }
+    #dialogue-portrait {
+      width: 56px;
+      height: 56px;
+      image-rendering: pixelated;
+      flex-shrink: 0;
+      border: 1px solid #4a3f6b;
+      background: #0d0d1a;
+    }
+    #dialogue-right { flex: 1; }
+    #dialogue-speaker {
+      font-family: 'Cinzel', serif;
+      font-size: 0.9rem;
+      margin-bottom: 5px;
+      letter-spacing: 1px;
+    }
+    #dialogue-text {
+      color: #ccc8e0;
+      font-size: 1rem;
+      line-height: 1.5;
+      min-height: 44px;
+    }
+    #dialogue-hint {
+      margin-top: 8px;
+      font-size: 0.78rem;
+      color: #7a7590;
+      font-family: monospace;
+      text-align: right;
+    }
+  </style>
+</head>
+<body>
+
+  <nav class="navbar">
+    <span class="nav-logo">⚔️ DUNGEON QUEST</span>
+    <ul>
+      <li><a href="index.html">Início</a></li>
+      <li><a href="devs.html">Desenvolvedores</a></li>
+      <li><a href="game.html" class="active">Jogar</a></li>
+    </ul>
+  </nav>
+
+  <div class="game-page">
+
+    <div class="game-instructions">
+      <h2 id="instr-title">🏘️ Vila — Fase 1</h2>
+      <ul>
+        <li><strong>WASD</strong> — Mover</li>
+        <li><strong>E</strong> — Falar com NPC próximo</li>
+        <li><strong>ENTER</strong> — Avançar diálogo</li>
+        <li id="instr-dungeon" style="display:none;"><strong>ESPAÇO</strong> — Atacar (direção do movimento)</li>
+      </ul>
+    </div>
+
+    <div class="canvas-wrapper">
+      <div id="start-screen">
+        <h2>⚔️ DUNGEON QUEST</h2>
+        <p>Fale com os habitantes da vila antes de entrar na dungeon</p>
+        <button onclick="startGame()">▶ INICIAR JOGO</button>
+      </div>
+      <div id="game-over-screen" style="display:none;">
+        <h2>💀 GAME OVER</h2>
+        <p>Você foi derrotado nas profundezas...</p>
+        <button onclick="restartGame()">🔄 Tentar Novamente</button>
+      </div>
+      <div id="win-screen" style="display:none;">
+        <h2>🏆 VITÓRIA!</h2>
+        <p>O Boss foi derrotado! A dungeon está livre!</p>
+        <button onclick="restartGame()">🔄 Jogar Novamente</button>
+      </div>
+      <div id="transition-screen" style="display:none;">
+        <h2>⚠️ DUNGEON</h2>
+        <p>Você ouviu os sábios. Agora enfrente as trevas.</p>
+        <button onclick="enterDungeon()">🗡️ ENTRAR NA DUNGEON</button>
+      </div>
+
+      <canvas id="gameCanvas" width="700" height="500"></canvas>
+
+      <div id="dialogue-box">
+        <img id="dialogue-portrait" src="" alt="" />
+        <div id="dialogue-right">
+          <div id="dialogue-speaker">???</div>
+          <div id="dialogue-text"></div>
+          <div id="dialogue-hint">[ ENTER ] continuar</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="game-hud-info">
+      <p>📍 Fase: <span id="phase-display">Vila</span></p>
+      <p>❤️ HP: <span id="hp-display">100</span> / 100</p>
+      <p>💬 NPCs: <span id="npc-display">0</span> / 3</p>
+    </div>
+  </div>
+
+  <section class="references">
+    <h2>📚 Referências</h2>
+    <ul>
+      <li>Sprites gerados com IA pelo grupo (Leonardo.ai)</li>
+      <li>Canvas API: <a href="https://developer.mozilla.org/en-US/docs/Web/API/Canvas_API" target="_blank">MDN Web Docs</a></li>
+    </ul>
+    <p><em>Código desenvolvido pelo grupo. Trechos baseados em documentação oficial foram compreendidos e adaptados pela equipe.</em></p>
+  </section>
+  <footer><p>Projeto acadêmico · CCP120 · FEI · 2025</p></footer>
+
+<script>
+// ================================================
+// DUNGEON QUEST
+// ================================================
+
+// --- Canvas ---
+var canvas = document.getElementById("gameCanvas");
+var ctx = canvas.getContext("2d");
+var LARGURA = canvas.width;   // 700
+var ALTURA  = canvas.height;  // 500
+
+// --- Estado geral ---
+var fase = "vila";        // "vila" ou "dungeon"
+var jogoRodando = false;
+var teclas = {};          // guarda quais teclas estão pressionadas
+
+// ================================================
+// IMAGENS
+// ================================================
+
+// Carrega uma imagem e guarda no objeto "imagens"
+var imagens = {};
+
+function carregarImagem(nome, arquivo) {
+  var img = new Image();
+  img.src = arquivo;
+  imagens[nome] = img;
+}
+
+carregarImagem("heroi",      "hero.png");
+carregarImagem("inimigo",    "enemy.png");
+carregarImagem("boss",       "boss.png");
+carregarImagem("npc0",       "npc0.png");   // Ancião
+carregarImagem("npc1",       "npc1.png");   // Maga
+carregarImagem("npc2",       "npc2.png");   // Guerreiro
+carregarImagem("fundoVila",  "bg_village.png");
+carregarImagem("fundoDungeon", "bg_dungeon.png");
+
+// ================================================
+// HERÓI (jogador)
+// ================================================
+
+// O sprite sheet do herói tem 4 colunas e 4 linhas
+// Cada frame mede 256x256 pixels (1024 / 4 = 256)
+// Linha 0 = andando pra baixo
+// Linha 1 = andando pra cima
+// Linha 2 = andando pra esquerda
+// Linha 3 = andando pra direita
+var FRAME_LARGURA = 256;
+var FRAME_ALTURA  = 256;
+
+var heroi = {
+  x: LARGURA / 2,
+  y: ALTURA / 2,
+  hp: 100,
+  hpMaximo: 100,
+  tamanho: 32,
+  velocidade: 3,
+  cooldownAtaque: 0,   // tempo de espera entre tiros
+  invencivel: 0,       // tempo de invencibilidade após levar dano
+  direcaoLinha: 0,     // qual linha do sprite sheet usar (0-3)
+  frameAtual: 0,       // qual coluna do sprite sheet usar (0-3)
+  timerAnimacao: 0     // contador para trocar frame
+};
+
+// Direção do último movimento — usada para definir o rumo do tiro
+var direcaoTiro = { dx: 0, dy: 1 }; // começa apontando pra baixo
+
+function resetarHeroi() {
+  heroi.x = LARGURA / 2;
+  heroi.y = ALTURA / 2;
+  heroi.hp = 100;
+  heroi.cooldownAtaque = 0;
+  heroi.invencivel = 0;
+  heroi.direcaoLinha = 0;
+  heroi.frameAtual = 0;
+  heroi.timerAnimacao = 0;
+  direcaoTiro = { dx: 0, dy: 1 };
+}
+
+// ================================================
+// NPCs DA VILA
+// ================================================
+
+var npcs = [
+  {
+    x: 150, y: 210,
+    imagem: "npc0",
+    nome: "Ancião Rodrik",
+    cor: "#e0c97f",
+    jaConversou: false,
+    falas: [
+      "Aventureiro... você sabe o que espreita nessa dungeon?",
+      "O Boss — o Dragão das Sombras — é imune a ataques frontais.",
+      "Ele atira projéteis em 4 direções. Fique nas DIAGONAIS para desviar!",
+      "Boa sorte. Muitos entraram... poucos voltaram."
+    ]
+  },
+  {
+    x: 530, y: 230,
+    imagem: "npc1",
+    nome: "Maga Lyra",
+    cor: "#9b5de5",
+    jaConversou: false,
+    falas: [
+      "Ah, outro herói voluntário. Deixa eu te dar uma dica valiosa.",
+      "O Boss tem 15 pontos de vida. Seus projéteis causam 1 de dano cada.",
+      "Você vai precisar de pelo menos 15 acertos certeiros.",
+      "Não desperdice projéteis — guarde energia para o Boss!"
+    ]
+  },
+  {
+    x: 350, y: 390,
+    imagem: "npc2",
+    nome: "Guerreiro Kael",
+    cor: "#06d6a0",
+    jaConversou: false,
+    falas: [
+      "Ei! Escuta aqui antes de entrar nessa masmorra.",
+      "Os inimigos normais se movem em linha reta até você.",
+      "Use as paredes a seu favor — fique em cantos para limitar os ângulos.",
+      "Após levar dano, você fica invencível por 1 segundo. Use isso!"
+    ]
+  }
+];
+
+// Controle do diálogo
+var dialogoAtivo = false;
+var npcAtual = null;
+var linhaAtual = 0;
+var npcosConversados = 0;
+
+// ================================================
+// DUNGEON
+// ================================================
+
+var inimigos = [];
+var projeteis = [];
+var salaAtual = 0;
+
+var VELOCIDADE_PROJETIL = 7;
+var TAMANHO_PROJETIL = 8;
+
+// Cada sala é uma lista de inimigos com posição e HP
+var salas = [
+  // Sala 1 — 2 inimigos fáceis
+  [
+    { x: 180, y: 160, hp: 3, hpMaximo: 3, ehBoss: false },
+    { x: 520, y: 300, hp: 3, hpMaximo: 3, ehBoss: false }
+  ],
+  // Sala 2 — 3 inimigos
+  [
+    { x: 150, y: 180, hp: 3, hpMaximo: 3, ehBoss: false },
+    { x: 400, y: 120, hp: 3, hpMaximo: 3, ehBoss: false },
+    { x: 560, y: 340, hp: 3, hpMaximo: 3, ehBoss: false }
+  ],
+  // Sala 3 — 4 inimigos mais fortes
+  [
+    { x: 120, y: 130, hp: 4, hpMaximo: 4, ehBoss: false },
+    { x: 580, y: 130, hp: 4, hpMaximo: 4, ehBoss: false },
+    { x: 120, y: 370, hp: 4, hpMaximo: 4, ehBoss: false },
+    { x: 580, y: 370, hp: 4, hpMaximo: 4, ehBoss: false }
+  ],
+  // Sala 4 — Boss final
+  [
+    { x: 350, y: 190, hp: 15, hpMaximo: 15, ehBoss: true }
+  ]
+];
+
+// Velocidade dos inimigos por sala (boss é lento mas perigoso)
+var velocidadePorSala = [0.8, 1.0, 1.2, 0.7];
+
+function carregarSala(indice) {
+  salaAtual = indice;
+  inimigos = [];
+  projeteis = [];
+
+  for (var i = 0; i < salas[indice].length; i++) {
+    var modelo = salas[indice][i];
+    var velocidade = modelo.ehBoss ? velocidadePorSala[3] : velocidadePorSala[indice];
+
+    inimigos.push({
+      x: modelo.x,
+      y: modelo.y,
+      hp: modelo.hp,
+      hpMaximo: modelo.hpMaximo,
+      ehBoss: modelo.ehBoss,
+      tamanho: modelo.ehBoss ? 60 : 38,
+      velocidade: velocidade,
+      timerAtaque: 0   // usado pelo boss para contar quando atirar
+    });
+  }
+
+  // Reposiciona o herói na entrada
+  heroi.x = LARGURA / 2;
+  heroi.y = ALTURA - 80;
+
+  atualizarHUD();
+}
+
+// ================================================
+// TECLADO
+// ================================================
+
+document.addEventListener("keydown", function(evento) {
+  teclas[evento.code] = true;
+
+  // Impede a página de rolar com as setas e espaço
+  var teclasDeBloqueio = ["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"];
+  if (teclasDeBloqueio.indexOf(evento.code) >= 0) {
+    evento.preventDefault();
+  }
+
+  // Avança o diálogo ao pressionar Enter
+  if (evento.code === "Enter" && dialogoAtivo) {
+    avancarDialogo();
+  }
+
+  // Tenta falar com NPC ao pressionar E (só na vila)
+  if (evento.code === "KeyE" && fase === "vila" && !dialogoAtivo && jogoRodando) {
+    tentarFalarComNPC();
+  }
+});
+
+document.addEventListener("keyup", function(evento) {
+  teclas[evento.code] = false;
+});
+
+// ================================================
+// DIÁLOGO
+// ================================================
+
+function tentarFalarComNPC() {
+  for (var i = 0; i < npcs.length; i++) {
+    var npc = npcs[i];
+    var distancia = Math.sqrt(Math.pow(heroi.x - npc.x, 2) + Math.pow(heroi.y - npc.y, 2));
+
+    if (distancia < 60) {
+      npcAtual = npc;
+      linhaAtual = 0;
+      dialogoAtivo = true;
+      mostrarFala();
+      return;
+    }
+  }
+}
+
+function mostrarFala() {
+  var caixaDialogo = document.getElementById("dialogue-box");
+  caixaDialogo.style.display = "flex";
+
+  document.getElementById("dialogue-portrait").src = npcAtual.imagem + ".png";
+  document.getElementById("dialogue-speaker").textContent = npcAtual.nome;
+  document.getElementById("dialogue-speaker").style.color = npcAtual.cor;
+  document.getElementById("dialogue-text").textContent = npcAtual.falas[linhaAtual];
+
+  var ehUltimaFala = linhaAtual === npcAtual.falas.length - 1;
+  document.getElementById("dialogue-hint").textContent = ehUltimaFala ? "[ ENTER ] fechar" : "[ ENTER ] continuar";
+}
+
+function avancarDialogo() {
+  linhaAtual++;
+
+  // Acabou as falas do NPC
+  if (linhaAtual >= npcAtual.falas.length) {
+    // Marca como conversado
+    if (!npcAtual.jaConversou) {
+      npcAtual.jaConversou = true;
+      npcosConversados++;
+      atualizarHUD();
+    }
+
+    // Fecha a caixa de diálogo
+    document.getElementById("dialogue-box").style.display = "none";
+    dialogoAtivo = false;
+    npcAtual = null;
+
+    // Se falou com todos os NPCs, mostra a tela de transição para a dungeon
+    if (npcosConversados >= npcs.length) {
+      setTimeout(mostrarTransicao, 500);
+    }
+
+  } else {
+    mostrarFala();
+  }
+}
+
+function mostrarTransicao() {
+  jogoRodando = false;
+  document.getElementById("transition-screen").style.display = "flex";
+}
+
+function enterDungeon() {
+  document.getElementById("transition-screen").style.display = "none";
+  document.getElementById("instr-title").textContent = "⚔️ Dungeon — Fase 2";
+  document.getElementById("instr-dungeon").style.display = "list-item";
+  document.getElementById("phase-display").textContent = "Dungeon";
+
+  fase = "dungeon";
+  resetarHeroi();
+  carregarSala(0);
+  jogoRodando = true;
+  loopDoJogo();
+}
+
+// ================================================
+// MOVIMENTO E ATAQUE
+// ================================================
+
+function moverHeroi() {
+  var movendo = false;
+
+  // Move e atualiza a direção visual e de tiro
+  if (teclas["KeyS"] || teclas["ArrowDown"]) {
+    heroi.y += heroi.velocidade;
+    heroi.direcaoLinha = 0;           // sprite: olhando pra baixo
+    direcaoTiro = { dx: 0, dy: 1 };
+    movendo = true;
+  }
+  if (teclas["KeyW"] || teclas["ArrowUp"]) {
+    heroi.y -= heroi.velocidade;
+    heroi.direcaoLinha = 1;           // sprite: olhando pra cima
+    direcaoTiro = { dx: 0, dy: -1 };
+    movendo = true;
+  }
+  if (teclas["KeyA"] || teclas["ArrowLeft"]) {
+    heroi.x -= heroi.velocidade;
+    heroi.direcaoLinha = 2;           // sprite: olhando pra esquerda
+    direcaoTiro = { dx: -1, dy: 0 };
+    movendo = true;
+  }
+  if (teclas["KeyD"] || teclas["ArrowRight"]) {
+    heroi.x += heroi.velocidade;
+    heroi.direcaoLinha = 3;           // sprite: olhando pra direita
+    direcaoTiro = { dx: 1, dy: 0 };
+    movendo = true;
+  }
+
+  // Animação de caminhada: troca o frame a cada 12 updates
+  if (movendo) {
+    heroi.timerAnimacao++;
+    if (heroi.timerAnimacao >= 12) {
+      heroi.timerAnimacao = 0;
+      heroi.frameAtual = (heroi.frameAtual + 1) % 4;
+    }
+  } else {
+    heroi.frameAtual = 0; // parado = primeiro frame
+  }
+
+  // Impede o herói de sair do canvas
+  var metade = heroi.tamanho / 2;
+  if (heroi.x < metade)          heroi.x = metade;
+  if (heroi.x > LARGURA - metade) heroi.x = LARGURA - metade;
+  if (heroi.y < 60 + metade)     heroi.y = 60 + metade;
+  if (heroi.y > ALTURA - metade)  heroi.y = ALTURA - metade;
+}
+
+function atirar() {
+  // Só atira se o cooldown zerou
+  if (heroi.cooldownAtaque > 0) return;
+
+  projeteis.push({
+    x: heroi.x,
+    y: heroi.y,
+    dx: direcaoTiro.dx * VELOCIDADE_PROJETIL,
+    dy: direcaoTiro.dy * VELOCIDADE_PROJETIL,
+    doHeroi: true
+  });
+
+  heroi.cooldownAtaque = 35; // espera 35 frames (~0.6s) antes de poder atirar de novo
+}
+
+// Verifica se dois círculos estão se tocando
+function colidiu(x1, y1, raio1, x2, y2, raio2) {
+  var distancia = Math.sqrt(Math.pow(x1 - x2, 2) + Math.pow(y1 - y2, 2));
+  return distancia < raio1 + raio2;
+}
+
+// ================================================
+// UPDATE (lógica por frame)
+// ================================================
+
+function update() {
+  if (fase === "vila") {
+    if (!dialogoAtivo) moverHeroi();
+  } else {
+    updateDungeon();
+  }
+}
+
+function updateDungeon() {
+  moverHeroi();
+
+  // Atira ao pressionar Espaço
+  if (teclas["Space"]) atirar();
+
+  // Conta down dos timers
+  if (heroi.cooldownAtaque > 0) heroi.cooldownAtaque--;
+  if (heroi.invencivel > 0)     heroi.invencivel--;
+
+  // --- Atualiza projeteis ---
+  for (var i = projeteis.length - 1; i >= 0; i--) {
+    var proj = projeteis[i];
+    proj.x += proj.dx;
+    proj.y += proj.dy;
+
+    // Remove projétil se saiu da tela
+    if (proj.x < 0 || proj.x > LARGURA || proj.y < 0 || proj.y > ALTURA) {
+      projeteis.splice(i, 1);
+      continue;
+    }
+
+    // Projétil do herói acerta inimigo
+    if (proj.doHeroi) {
+      for (var j = inimigos.length - 1; j >= 0; j--) {
+        var ini = inimigos[j];
+        if (colidiu(proj.x, proj.y, TAMANHO_PROJETIL / 2, ini.x, ini.y, ini.tamanho / 2)) {
+          ini.hp--;
+          projeteis.splice(i, 1);
+          if (ini.hp <= 0) inimigos.splice(j, 1); // inimigo morreu
+          break;
+        }
+      }
+
+    // Projétil do boss acerta herói
+    } else {
+      if (colidiu(proj.x, proj.y, TAMANHO_PROJETIL / 2, heroi.x, heroi.y, heroi.tamanho / 2)) {
+        if (heroi.invencivel <= 0) {
+          heroi.hp -= 15;
+          heroi.invencivel = 50; // fica invencível por 50 frames após levar dano
+          atualizarHUD();
+          projeteis.splice(i, 1);
+        }
+      }
+    }
+  }
+
+  // --- Atualiza inimigos ---
+  for (var i = 0; i < inimigos.length; i++) {
+    var ini = inimigos[i];
+
+    // Move em direção ao herói
+    var difX = heroi.x - ini.x;
+    var difY = heroi.y - ini.y;
+    var distancia = Math.sqrt(difX * difX + difY * difY);
+    if (distancia > 0) {
+      ini.x += (difX / distancia) * ini.velocidade;
+      ini.y += (difY / distancia) * ini.velocidade;
+    }
+
+    if (ini.ehBoss) {
+      // Boss atira em 4 direções a cada 80 frames
+      ini.timerAtaque++;
+      if (ini.timerAtaque >= 140) {
+        ini.timerAtaque = 0;
+        var direcoes = [
+          { dx: 1, dy: 0 }, { dx: -1, dy: 0 },
+          { dx: 0, dy: 1 }, { dx: 0, dy: -1 }
+        ];
+        for (var d = 0; d < direcoes.length; d++) {
+          projeteis.push({
+            x: ini.x, y: ini.y,
+            dx: direcoes[d].dx * 3,
+            dy: direcoes[d].dy * 3,
+            doHeroi: false
+          });
+        }
+      }
+    } else {
+      // Inimigo normal causa dano por contato
+      if (colidiu(ini.x, ini.y, ini.tamanho / 2, heroi.x, heroi.y, heroi.tamanho / 2)) {
+        if (heroi.invencivel <= 0) {
+          heroi.hp -= 10;
+          heroi.invencivel = 50;
+          atualizarHUD();
+        }
+      }
+    }
+  }
+
+  // --- Verifica morte do herói ---
+  if (heroi.hp <= 0) {
+    gameOver();
+    return;
+  }
+
+  // --- Sala limpa: vai para a próxima ---
+  if (inimigos.length === 0) {
+    if (salaAtual < salas.length - 1) {
+      // Adiciona dummy para evitar re-trigger imediato
+      inimigos.push({ x: -999, y: -999, hp: 0, hpMaximo: 0, ehBoss: false, tamanho: 0, velocidade: 0, timerAtaque: 0 });
+      setTimeout(function() { carregarSala(salaAtual + 1); }, 900);
+    } else {
+      venceu();
+    }
+  }
+}
+
+// ================================================
+// DESENHO
+// ================================================
+
+// Desenha uma imagem centralizada em (x, y)
+function desenharSprite(imagem, x, y, largura, altura) {
+  if (imagem && imagem.complete && imagem.naturalWidth > 0) {
+    ctx.drawImage(imagem, x - largura / 2, y - altura / 2, largura, altura);
+    return true;
+  }
+  return false; // imagem ainda não carregou
+}
+
+function desenharHeroi() {
+  // Pisca quando invencível (a cada 5 frames alterna visível/invisível)
+  if (heroi.invencivel > 0 && Math.floor(heroi.invencivel / 5) % 2 === 0) return;
+
+  var img = imagens["heroi"];
+  var tamanhoDesenho = 56;
+
+  if (img && img.complete && img.naturalWidth > 0) {
+    // Calcula qual parte do sprite sheet recortar
+    var origemX = heroi.frameAtual    * FRAME_LARGURA; // coluna
+    var origemY = heroi.direcaoLinha  * FRAME_ALTURA;  // linha
+
+    ctx.drawImage(
+      img,
+      origemX, origemY, FRAME_LARGURA, FRAME_ALTURA,           // recorte do sheet
+      heroi.x - tamanhoDesenho / 2, heroi.y - tamanhoDesenho / 2, // posição no canvas
+      tamanhoDesenho, tamanhoDesenho                            // tamanho no canvas
+    );
+  } else {
+    // Fallback: círculo verde se imagem não carregou
+    ctx.fillStyle = "#06d6a0";
+    ctx.beginPath();
+    ctx.arc(heroi.x, heroi.y, heroi.tamanho / 2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function desenharVila() {
+  // Fundo
+  if (!desenharSprite(imagens["fundoVila"], LARGURA / 2, ALTURA / 2, LARGURA, ALTURA)) {
+    ctx.fillStyle = "#0d1b2a";
+    ctx.fillRect(0, 0, LARGURA, ALTURA);
+  }
+  ctx.fillStyle = "rgba(0,0,0,0.25)";
+  ctx.fillRect(0, 0, LARGURA, ALTURA);
+
+  // Texto de instrução no topo
+  ctx.fillStyle = "#e0c97f";
+  ctx.font = "bold 13px monospace";
+  ctx.textAlign = "center";
+  ctx.fillText("🏘️ VILA DOS SÁBIOS — Fale com os 3 NPCs antes de entrar na dungeon", LARGURA / 2, 28);
+
+  ctx.fillStyle = npcosConversados >= npcs.length ? "#06d6a0" : "#7a7590";
+  ctx.font = "12px monospace";
+  ctx.fillText("Conversados: " + npcosConversados + " / " + npcs.length, LARGURA / 2, 46);
+
+  // Porta da dungeon (aparece após falar com todos)
+  if (npcosConversados >= npcs.length) {
+    ctx.fillStyle = "#3a0a0a";
+    ctx.fillRect(LARGURA / 2 - 28, 52, 56, 74);
+    ctx.strokeStyle = "#e63946";
+    ctx.lineWidth = 3;
+    ctx.strokeRect(LARGURA / 2 - 28, 52, 56, 74);
+    ctx.lineWidth = 1;
+    ctx.font = "26px serif";
+    ctx.fillStyle = "#fff";
+    ctx.fillText("🚪", LARGURA / 2, 105);
+    ctx.fillStyle = "#e0c97f";
+    ctx.font = "bold 11px monospace";
+    ctx.fillText("⚠ DUNGEON ⚠", LARGURA / 2, 140);
+  }
+
+  // Desenha cada NPC
+  for (var i = 0; i < npcs.length; i++) {
+    var npc = npcs[i];
+    var distancia = Math.sqrt(Math.pow(heroi.x - npc.x, 2) + Math.pow(heroi.y - npc.y, 2));
+
+    // Sombra no chão
+    ctx.fillStyle = "rgba(0,0,0,0.3)";
+    ctx.beginPath();
+    ctx.ellipse(npc.x, npc.y + 28, 18, 6, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Sprite do NPC
+    if (!desenharSprite(imagens[npc.imagem], npc.x, npc.y, 52, 52)) {
+      ctx.fillStyle = npc.cor;
+      ctx.beginPath();
+      ctx.arc(npc.x, npc.y, 24, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Nome abaixo do NPC
+    ctx.fillStyle = npc.cor;
+    ctx.font = "bold 11px monospace";
+    ctx.textAlign = "center";
+    ctx.fillText(npc.nome, npc.x, npc.y + 48);
+
+    // Indicador [E] quando o herói está perto
+    if (distancia < 60 && !dialogoAtivo && !npc.jaConversou) {
+      ctx.fillStyle = "#e0c97f";
+      ctx.font = "bold 12px monospace";
+      ctx.fillText("[E] Falar", npc.x, npc.y - 38);
+    }
+
+    // Check verde se já conversou
+    if (npc.jaConversou) {
+      ctx.fillStyle = "#06d6a0";
+      ctx.font = "bold 16px sans-serif";
+      ctx.fillText("✓", npc.x + 36, npc.y - 20);
+    }
+  }
+
+  desenharHeroi();
+}
+
+function desenharDungeon() {
+  // Fundo
+  if (!desenharSprite(imagens["fundoDungeon"], LARGURA / 2, ALTURA / 2, LARGURA, ALTURA)) {
+    ctx.fillStyle = "#1a1a2e";
+    ctx.fillRect(0, 0, LARGURA, ALTURA);
+  }
+  ctx.fillStyle = "rgba(5,3,15,0.55)";
+  ctx.fillRect(0, 0, LARGURA, ALTURA);
+
+  // Borda de parede
+  ctx.strokeStyle = "#4a3f6b";
+  ctx.lineWidth = 8;
+  ctx.strokeRect(4, 4, LARGURA - 8, ALTURA - 8);
+  ctx.lineWidth = 1;
+
+  // Número da sala
+  ctx.fillStyle = "#e0c97f";
+  ctx.font = "bold 14px monospace";
+  ctx.textAlign = "center";
+  ctx.fillText("SALA " + (salaAtual + 1) + " / " + salas.length, LARGURA / 2, 30);
+  if (salaAtual === salas.length - 1) {
+    ctx.fillStyle = "#ff6b6b";
+    ctx.fillText("⚠ BOSS FINAL ⚠", LARGURA / 2, 50);
+  }
+
+  // Desenha cada inimigo
+  for (var i = 0; i < inimigos.length; i++) {
+    var ini = inimigos[i];
+    if (ini.x < 0) continue; // ignora dummy
+
+    var imgInimigo = ini.ehBoss ? imagens["boss"] : imagens["inimigo"];
+    var tamanhoDesenho = ini.tamanho * 1.7;
+
+    ctx.shadowColor = ini.ehBoss ? "#9b5de5" : "#e63946";
+    ctx.shadowBlur  = ini.ehBoss ? 24 : 14;
+
+    if (!desenharSprite(imgInimigo, ini.x, ini.y, tamanhoDesenho, tamanhoDesenho)) {
+      ctx.fillStyle = ini.ehBoss ? "#9b5de5" : "#e63946";
+      ctx.beginPath();
+      ctx.arc(ini.x, ini.y, ini.tamanho / 2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.shadowBlur = 0;
+
+    // Barra de HP do inimigo
+    var barraLargura = tamanhoDesenho + 8;
+    var barraX = ini.x - barraLargura / 2;
+    var barraY = ini.y - tamanhoDesenho / 2 - 12;
+    ctx.fillStyle = "#222";
+    ctx.fillRect(barraX, barraY, barraLargura, 6);
+    ctx.fillStyle = ini.ehBoss ? "#9b5de5" : "#e63946";
+    ctx.fillRect(barraX, barraY, barraLargura * (ini.hp / ini.hpMaximo), 6);
+    ctx.strokeStyle = "#555";
+    ctx.strokeRect(barraX, barraY, barraLargura, 6);
+  }
+
+  // Desenha projéteis
+  for (var i = 0; i < projeteis.length; i++) {
+    var proj = projeteis[i];
+    ctx.shadowColor = proj.doHeroi ? "#f8e16c" : "#ff006e";
+    ctx.shadowBlur = 12;
+    ctx.fillStyle  = proj.doHeroi ? "#f8e16c" : "#ff006e";
+    ctx.beginPath();
+    ctx.arc(proj.x, proj.y, TAMANHO_PROJETIL / 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+  }
+
+  // Barra de HP do herói (rodapé)
+  ctx.fillStyle = "#222";
+  ctx.fillRect(10, ALTURA - 26, 200, 16);
+  ctx.fillStyle = heroi.hp > 40 ? "#06d6a0" : "#e63946";
+  ctx.fillRect(10, ALTURA - 26, 200 * (heroi.hp / heroi.hpMaximo), 16);
+  ctx.strokeStyle = "#555";
+  ctx.strokeRect(10, ALTURA - 26, 200, 16);
+  ctx.fillStyle = "#fff";
+  ctx.font = "11px monospace";
+  ctx.textAlign = "left";
+  ctx.fillText("❤ HP: " + Math.max(0, heroi.hp), 14, ALTURA - 13);
+
+  desenharHeroi();
+}
+
+function draw() {
+  if (fase === "vila") desenharVila();
+  else desenharDungeon();
+}
+
+// ================================================
+// HUD, LOOP E TELAS
+// ================================================
+
+function atualizarHUD() {
+  document.getElementById("hp-display").textContent  = Math.max(0, heroi.hp);
+  document.getElementById("npc-display").textContent = npcosConversados;
+}
+
+function loopDoJogo() {
+  if (!jogoRodando) return;
+  update();
+  draw();
+  requestAnimationFrame(loopDoJogo);
+}
+
+function startGame() {
+  document.getElementById("start-screen").style.display = "none";
+  fase = "vila";
+  npcosConversados = 0;
+  for (var i = 0; i < npcs.length; i++) npcs[i].jaConversou = false;
+  resetarHeroi();
+  atualizarHUD();
+  jogoRodando = true;
+  loopDoJogo();
+}
+
+function gameOver() {
+  jogoRodando = false;
+  ctx.fillStyle = "rgba(0,0,0,0.78)";
+  ctx.fillRect(0, 0, LARGURA, ALTURA);
+  document.getElementById("game-over-screen").style.display = "flex";
+}
+
+function venceu() {
+  jogoRodando = false;
+  ctx.fillStyle = "rgba(0,0,0,0.78)";
+  ctx.fillRect(0, 0, LARGURA, ALTURA);
+  document.getElementById("win-screen").style.display = "flex";
+}
+
+function restartGame() {
+  document.getElementById("game-over-screen").style.display = "none";
+  document.getElementById("win-screen").style.display = "none";
+  document.getElementById("instr-title").textContent = "🏘️ Vila — Fase 1";
+  document.getElementById("instr-dungeon").style.display = "none";
+  document.getElementById("phase-display").textContent = "Vila";
+  startGame();
+}
+</script>
+</body>
+</html>
